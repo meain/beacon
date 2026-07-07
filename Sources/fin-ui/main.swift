@@ -9,6 +9,14 @@ final class FloatingPanel: NSWindow {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: FloatingPanel?
+    /// True once the window sits at a user-chosen (or restored) position, so we
+    /// stop auto-centring it.
+    private var userPositioned = false
+    /// Guards against reacting to our own programmatic moves.
+    private var programmaticMove = false
+
+    private let topLeftXKey = "fin.window.topLeftX"
+    private let topLeftYKey = "fin.window.topLeftY"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
@@ -24,14 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.level = .floating
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.center()
-        // Nudge above center, like Spotlight.
-        if let screen = NSScreen.main {
-            var frame = panel.frame
-            frame.origin.y = screen.frame.midY + screen.frame.height * 0.10
-            panel.setFrameOrigin(frame.origin)
-        }
         self.window = panel
+
+        // Restore the last user position if there is one, else centre.
+        if let topLeft = savedTopLeft() {
+            applyTopLeft(topLeft, to: panel)
+            userPositioned = true
+        } else {
+            center(panel)
+        }
 
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -40,6 +49,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(resign),
             name: NSWindow.didResignKeyNotification, object: panel)
+        // Keep position stable as the window grows/shrinks with content.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowResized),
+            name: NSWindow.didResizeNotification, object: panel)
+        // Remember where the user drags the window to.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowMoved),
+            name: NSWindow.didMoveNotification, object: panel)
+    }
+
+    /// Move without tripping the didMove handler.
+    private func moveWindow(_ window: NSWindow, to origin: NSPoint) {
+        programmaticMove = true
+        window.setFrameOrigin(origin)
+        programmaticMove = false
+    }
+
+    /// Place the window at the exact centre of the active screen.
+    private func center(_ window: NSWindow) {
+        guard let screen = window.screen ?? NSScreen.main else { return }
+        let f = window.frame
+        moveWindow(window, to: NSPoint(x: screen.visibleFrame.midX - f.width / 2,
+                                       y: screen.visibleFrame.midY - f.height / 2))
+    }
+
+    /// Position the window so its top-left corner sits at `topLeft`.
+    private func applyTopLeft(_ topLeft: NSPoint, to window: NSWindow) {
+        moveWindow(window, to: NSPoint(x: topLeft.x, y: topLeft.y - window.frame.height))
+    }
+
+    private func savedTopLeft() -> NSPoint? {
+        let d = UserDefaults.standard
+        guard d.object(forKey: topLeftXKey) != nil,
+              d.object(forKey: topLeftYKey) != nil else { return nil }
+        return NSPoint(x: d.double(forKey: topLeftXKey), y: d.double(forKey: topLeftYKey))
+    }
+
+    private func saveTopLeft(_ window: NSWindow) {
+        UserDefaults.standard.set(Double(window.frame.minX), forKey: topLeftXKey)
+        UserDefaults.standard.set(Double(window.frame.maxY), forKey: topLeftYKey)
+    }
+
+    @objc private func windowResized() {
+        guard let window else { return }
+        if userPositioned, let topLeft = savedTopLeft() {
+            applyTopLeft(topLeft, to: window) // keep top-left fixed as it grows
+        } else {
+            center(window)
+        }
+    }
+
+    @objc private func windowMoved() {
+        guard !programmaticMove, let window else { return }
+        userPositioned = true
+        saveTopLeft(window)
     }
 
     @objc private func resign() {

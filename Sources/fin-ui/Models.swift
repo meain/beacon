@@ -66,6 +66,25 @@ struct FinEvent: Decodable {
     let max: Int?
 }
 
+// MARK: - Exported session (fin -export json)
+
+struct ExportedSession: Decodable {
+    let id: String?
+    let title: String?
+    let messages: [ExportedMessage]
+}
+
+struct ExportedMessage: Decodable {
+    let role: String
+    let content: String?
+}
+
+/// A message loaded from a previous session, ready to seed the transcript.
+struct LoadedMessage {
+    let role: ChatMessage.Role
+    let text: String
+}
+
 // MARK: - View models for rendered content
 
 /// A single tool invocation shown in the transcript.

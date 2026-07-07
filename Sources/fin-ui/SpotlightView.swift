@@ -121,18 +121,16 @@ struct SpotlightView: View {
             }
             Spacer()
             if vm.messages.isEmpty {
-                Toggle("Continue last chat (⌘L)", isOn: $vm.continuePrevious)
-                    .toggleStyle(.checkbox)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .background(
-                        Button("") { vm.continuePrevious.toggle() }
-                            .keyboardShortcut("l", modifiers: .command)
-                            .opacity(0)
-                    )
+                Button(action: vm.loadPreviousChat) {
+                    footerLabel("Previous chat", systemImage: "clock.arrow.circlepath", shortcut: "⌘P")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .keyboardShortcut("p", modifiers: .command)
+                .disabled(vm.isBusy)
             } else {
                 Button(action: vm.newChat) {
-                    Label("New", systemImage: "square.and.pencil").font(.system(size: 11))
+                    footerLabel("New", systemImage: "square.and.pencil", shortcut: "⌘N")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -145,6 +143,21 @@ struct SpotlightView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
+    }
+
+    /// A footer button label with its keyboard shortcut shown alongside.
+    private func footerLabel(_ title: String, systemImage: String, shortcut: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+            Text(title)
+            Text(shortcut)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Color.primary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .font(.system(size: 11))
     }
 
     // MARK: - Actions

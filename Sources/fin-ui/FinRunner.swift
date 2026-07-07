@@ -151,6 +151,41 @@ final class FinRunner {
         }
     }
 
+    /// Load fin's last saved session (`-export json -c`) and return its user /
+    /// assistant messages. Completion runs on the main queue.
+    func loadLastSession(completion: @escaping (_ title: String?, _ messages: [LoadedMessage]) -> Void) {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: Self.resolveFinPath())
+        proc.arguments = ["-export", "json", "-c"]
+        proc.environment = Self.loginEnvironment
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = FileHandle.nullDevice
+        proc.terminationHandler = { _ in
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            var title: String?
+            var loaded: [LoadedMessage] = []
+            if let session = try? JSONDecoder().decode(ExportedSession.self, from: data) {
+                title = session.title
+                for m in session.messages {
+                    let role: ChatMessage.Role
+                    switch m.role {
+                    case "user": role = .user
+                    case "assistant": role = .assistant
+                    default: continue // skip system / tool messages
+                    }
+                    let text = (m.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { continue }
+                    loaded.append(LoadedMessage(role: role, text: text))
+                }
+            }
+            DispatchQueue.main.async { completion(title, loaded) }
+        }
+        do { try proc.run() } catch {
+            DispatchQueue.main.async { completion(nil, []) }
+        }
+    }
+
     /// Answer a pending approval request.
     func respondToApproval(approve: Bool) {
         guard let stdinHandle else { return }

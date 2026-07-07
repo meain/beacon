@@ -12,9 +12,6 @@ final class ChatViewModel: ObservableObject {
     /// Bumped on every content-changing event so the view can auto-scroll
     /// (SpotlightView doesn't otherwise observe nested message updates).
     @Published var streamTick: Int = 0
-    /// When set for a fresh window, the first turn continues fin's last saved
-    /// session instead of starting one-off. Default off.
-    @Published var continuePrevious: Bool = false
 
     private let runner = FinRunner()
     private var currentAssistant: ChatMessage?
@@ -42,8 +39,27 @@ final class ChatViewModel: ObservableObject {
         isBusy = true
         statusText = nil
 
-        let shouldContinue = hasHadTurn || continuePrevious
-        runner.start(prompt: trimmed, continueSession: shouldContinue, model: nil)
+        runner.start(prompt: trimmed, continueSession: hasHadTurn, model: nil)
+    }
+
+    /// Load fin's last saved session into the transcript. Follow-up messages
+    /// then continue it (`-c`).
+    func loadPreviousChat() {
+        guard !isBusy, messages.isEmpty else { return }
+        isBusy = true
+        statusText = "loading previous chat…"
+        runner.loadLastSession { [weak self] title, loaded in
+            guard let self else { return }
+            self.isBusy = false
+            guard !loaded.isEmpty else {
+                self.statusText = "no previous chat found"
+                return
+            }
+            self.messages = loaded.map { ChatMessage(role: $0.role, text: $0.text) }
+            self.hasHadTurn = true
+            self.statusText = title
+            self.streamTick &+= 1
+        }
     }
 
     /// Reset the window for a brand-new conversation.
