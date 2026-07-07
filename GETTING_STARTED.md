@@ -48,7 +48,7 @@ fin-ui is fully keyboard driven — no mouse needed for the core flow.
 | type + `⏎` | send your question |
 | `esc` | close the popup (deny a pending approval first) |
 | `⌘N` | new chat (clears the window) |
-| `⌘L` | toggle *Continue last chat* (before the first message) |
+| `⌘P` | load the previous chat into view |
 | `⌘⏎` | approve a tool call |
 | `esc` | deny a tool call (when an approval card is showing) |
 | `⌘W` / `⌘Q` | close / quit |
@@ -74,9 +74,10 @@ without prompting.
 ## Continuing a previous chat
 
 - New launches start a fresh session (one-off).
-- Tick *Continue last chat* (`⌘L`) before your first message to resume fin's most
-  recent saved session.
+- Press *Previous chat* (`⌘P`) to load fin's most recent saved session into the view;
+  your next message continues it.
 - Follow-ups within an open window always continue the current conversation.
+- The window opens centered the first time; move it and it remembers where you left it.
 
 ## Troubleshooting
 

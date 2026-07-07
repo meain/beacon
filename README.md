@@ -29,6 +29,9 @@ Event stream (one JSON object per line):
 | `approval` | tool needs approval → reply `{"approve":true|false}` on stdin |
 | `session` / `info` / `retry` / `error` | status |
 
+`fin-ui` also synthesises a `stderr` event from the process's stderr so provider/retry
+errors surface in the transcript. Previous chats are loaded with `fin -export json -c`.
+
 ## Build & run
 
 ```bash
@@ -52,23 +55,39 @@ hotkey to launch it gives a true Spotlight experience. Bind `open -a fin-ui` (or
 ## Behaviour
 
 - **One-off by default**: each launch starts a fresh `fin` session.
-- **Continue**: tick *Continue last chat* before the first message to resume `fin`'s last
-  saved session (`-c`). Follow-up messages within an open window chain automatically.
+- **Previous chat** (⌘P): loads `fin`'s last saved session into the transcript; follow-up
+  messages then continue it (`-c`). Follow-ups within an open window always chain.
 - **New chat** (⌘N) resets the window.
 - **Approvals**: fin-ui honours your fin config's approval settings (`settings.approve`
   plus per-tool `approval`). Whenever fin asks for confirmation, an inline card appears —
   ⌘⏎ approves, Esc denies. (With `settings.approve = "all"`, everything auto-runs.)
 - Code blocks are syntax-highlighted with a copy button.
+- **Window position**: opens centered on first run; drag it and the position is
+  remembered (persisted in `UserDefaults`) for next launch.
+
+## Keyboard shortcuts
+
+Fully keyboard driven — no mouse needed for the core flow.
+
+| Key | Action |
+|-----|--------|
+| type + `⏎` | send |
+| `esc` | close (deny a pending approval first) |
+| `⌘⏎` | approve a tool call |
+| `⌘N` | new chat |
+| `⌘P` | load previous chat |
+| `⌘W` / `⌘Q` | close / quit |
+| `⌘C` / `⌘V` / `⌘A` | standard editing in the prompt field |
 
 ## Layout
 
 ```
 Sources/fin-ui/
-  main.swift            NSApplication + borderless floating panel + menu
-  SpotlightView.swift   prompt bar, transcript, footer
-  ChatViewModel.swift   state, event handling, session chaining
-  FinRunner.swift       spawns fin, streams JSONL, writes approvals
-  Models.swift          wire events + view models
+  main.swift            NSApplication + borderless panel, menu, centering & position memory
+  SpotlightView.swift   prompt bar, transcript, footer, auto-scroll, Esc handling
+  ChatViewModel.swift   state, event handling, session chaining, load-previous
+  FinRunner.swift       spawns fin, streams JSONL, writes approvals, exports last session
+  Models.swift          wire events + view models + export structs
   MarkdownParser.swift  block-level markdown → elements
   MarkdownView.swift    renders blocks (+ CodeBlockView)
   SyntaxHighlighter.swift  light-theme tokeniser
@@ -78,3 +97,8 @@ Sources/fin-ui/
 
 The `fin -ui json` mode lives in the fin repo at `internal/jsonui/jsonui.go`, wired up in
 `internal/cli/cli.go`.
+
+## Contributing
+
+See [AGENTS.md](AGENTS.md) for architecture, build/test workflow, and the non-obvious
+gotchas (GUI environment, ScrollView sizing, auto-scroll, approvals).
