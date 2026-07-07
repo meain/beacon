@@ -30,7 +30,8 @@ Event stream (one JSON object per line):
 | `session` / `info` / `retry` / `error` | status |
 
 `fin-ui` also synthesises a `stderr` event from the process's stderr so provider/retry
-errors surface in the transcript. Previous chats are loaded with `fin -export json -c`.
+errors surface in the transcript. Previous chats are read straight from fin's session
+JSONL files (`~/.local/share/fin/sessions`) — no extra fin process.
 
 ## Build & run
 

@@ -68,21 +68,37 @@ struct FinEvent: Decodable {
 
 // MARK: - Exported session (fin -export json)
 
-struct ExportedSession: Decodable {
-    let id: String?
-    let title: String?
-    let messages: [ExportedMessage]
-}
-
 struct ExportedMessage: Decodable {
     let role: String
     let content: String?
+    let toolCalls: [ExportedToolCall]?
+    let toolCallID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case role, content
+        case toolCalls = "tool_calls"
+        case toolCallID = "tool_call_id"
+    }
+}
+
+struct ExportedToolCall: Decodable {
+    let id: String
+    let name: String
+    let arguments: String // raw JSON string
+}
+
+/// A tool call reconstructed from a loaded session.
+struct LoadedTool {
+    let name: String
+    let args: [String: JSONValue]
+    let result: String?
 }
 
 /// A message loaded from a previous session, ready to seed the transcript.
 struct LoadedMessage {
     let role: ChatMessage.Role
     let text: String
+    let tools: [LoadedTool]
 }
 
 /// The first line of a session JSONL file.
@@ -96,6 +112,7 @@ struct SessionSummary: Identifiable {
     let id: String
     let title: String
     let date: Date
+    let url: URL
 }
 
 // MARK: - View models for rendered content

@@ -165,42 +165,68 @@ final class FinRunner {
         }
     }
 
-    /// Export a session (`id` = specific, nil = last) and return its id, title
-    /// and user/assistant messages. Completion runs on the main queue.
-    func loadSession(id: String?,
+    /// Load a session by reading its JSONL file directly (no fin spawn). The
+    /// first line is the header; each remaining line is one message. Completion
+    /// runs on the main queue.
+    func loadSession(url: URL,
                      completion: @escaping (_ id: String?, _ title: String?, _ messages: [LoadedMessage]) -> Void) {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: Self.resolveFinPath())
-        proc.arguments = ["-export", "json"] + (id.map { ["-session", $0] } ?? ["-c"])
-        proc.environment = Self.loginEnvironment
-        let out = Pipe()
-        proc.standardOutput = out
-        proc.standardError = FileHandle.nullDevice
-        proc.terminationHandler = { _ in
-            let data = out.fileHandleForReading.readDataToEndOfFile()
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let data = try? Data(contentsOf: url) else {
+                DispatchQueue.main.async { completion(nil, nil, []) }
+                return
+            }
+            let dec = JSONDecoder()
+            let lines = data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true)
+
             var sid: String?
             var title: String?
-            var loaded: [LoadedMessage] = []
-            if let session = try? JSONDecoder().decode(ExportedSession.self, from: data) {
-                sid = session.id
-                title = session.title
-                for m in session.messages {
-                    let role: ChatMessage.Role
-                    switch m.role {
-                    case "user": role = .user
-                    case "assistant": role = .assistant
-                    default: continue // skip system / tool messages
+            var parsed: [ExportedMessage] = []
+            for (i, line) in lines.enumerated() {
+                if i == 0 {
+                    if let h = try? dec.decode(SessionHeader.self, from: Data(line)) {
+                        sid = h.id
+                        title = h.title
                     }
-                    let text = (m.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { continue }
-                    loaded.append(LoadedMessage(role: role, text: text))
+                    continue
                 }
+                if let m = try? dec.decode(ExportedMessage.self, from: Data(line)) {
+                    parsed.append(m)
+                }
+            }
+
+            // Index tool results (role "tool") by their tool_call_id.
+            var results: [String: String] = [:]
+            for m in parsed where m.role == "tool" {
+                if let id = m.toolCallID { results[id] = m.content }
+            }
+
+            var loaded: [LoadedMessage] = []
+            for m in parsed {
+                let role: ChatMessage.Role
+                switch m.role {
+                case "user": role = .user
+                case "assistant": role = .assistant
+                default: continue // tool results consumed above; skip system
+                }
+                let text = (m.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let tools: [LoadedTool] = (m.toolCalls ?? []).map { tc in
+                    LoadedTool(name: tc.name,
+                               args: Self.decodeArgs(tc.arguments),
+                               result: results[tc.id])
+                }
+                guard !text.isEmpty || !tools.isEmpty else { continue }
+                loaded.append(LoadedMessage(role: role, text: text, tools: tools))
             }
             DispatchQueue.main.async { completion(sid, title, loaded) }
         }
-        do { try proc.run() } catch {
-            DispatchQueue.main.async { completion(nil, nil, []) }
-        }
+    }
+
+    /// Decode a tool call's raw JSON argument string into a display map.
+    private static func decodeArgs(_ raw: String) -> [String: JSONValue] {
+        guard let data = raw.data(using: .utf8),
+              let obj = try? JSONDecoder().decode([String: JSONValue].self, from: data)
+        else { return [:] }
+        return obj
     }
 
     /// List the most recent sessions by reading each JSONL file's header line.
@@ -239,7 +265,7 @@ final class FinRunner {
                 guard let h = try? JSONDecoder().decode(SessionHeader.self, from: headerData)
                 else { continue }
                 let title = (h.title?.isEmpty == false) ? h.title! : h.id
-                result.append(SessionSummary(id: h.id, title: title, date: mtime))
+                result.append(SessionSummary(id: h.id, title: title, date: mtime, url: url))
             }
             DispatchQueue.main.async { completion(result) }
         }

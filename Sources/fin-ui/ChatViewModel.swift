@@ -58,20 +58,30 @@ final class ChatViewModel: ObservableObject {
         runner.listSessions(limit: 50, completion: completion)
     }
 
-    /// Load a specific session into the transcript. Follow-ups continue it.
-    func loadSession(id: String) {
+    /// Load a session (from the picker) into the transcript by reading its file
+    /// directly. Follow-ups continue it.
+    func loadSession(_ summary: SessionSummary) {
         guard !isBusy else { return }
         isBusy = true
         statusText = "loading chat…"
-        runner.loadSession(id: id) { [weak self] sid, title, loaded in
+        runner.loadSession(url: summary.url) { [weak self] sid, title, loaded in
             guard let self else { return }
             self.isBusy = false
             guard !loaded.isEmpty else {
                 self.statusText = "could not load chat"
                 return
             }
-            self.messages = loaded.map { ChatMessage(role: $0.role, text: $0.text) }
-            self.currentSessionID = sid ?? id
+            self.messages = loaded.map { lm in
+                let msg = ChatMessage(role: lm.role, text: lm.text)
+                msg.tools = lm.tools.enumerated().map { i, lt in
+                    let tool = ToolCall(index: i, name: lt.name, args: lt.args)
+                    tool.running = false
+                    tool.result = lt.result
+                    return tool
+                }
+                return msg
+            }
+            self.currentSessionID = sid ?? summary.id
             self.hasHadTurn = true
             self.statusText = title
             self.streamTick &+= 1

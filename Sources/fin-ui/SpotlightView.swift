@@ -40,7 +40,7 @@ struct SpotlightView: View {
             inputFocused = true
             picker.onSelect = { session in
                 inputFocused = true
-                vm.loadSession(id: session.id)
+                vm.loadSession(session)
             }
             picker.onCancel = { inputFocused = true }
         }
