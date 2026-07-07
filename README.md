@@ -4,6 +4,8 @@ A Spotlight-style macOS popup for the [`fin`](https://github.com/meain/fin) CLI 
 open it, ask a question, watch a syntax-highlighted markdown answer stream in, approve
 tool calls inline, and continue the conversation.
 
+![fin-ui](docs/screenshot.png)
+
 New here? See [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## How it works
