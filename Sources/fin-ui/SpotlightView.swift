@@ -5,26 +5,35 @@ import SwiftUI
 struct SpotlightView: View {
     @StateObject private var vm = ChatViewModel()
     @StateObject private var picker = PickerModel()
+    @ObservedObject private var settings = AppSettings.shared
     @State private var input = ""
     @State private var focusToken = 0
     @State private var inputHeight: CGFloat = 24
+    @State private var settingsVisible = false
 
     private var showsTranscript: Bool {
         !vm.messages.isEmpty || vm.pendingApproval != nil
+    }
+
+    private var showsFullHeight: Bool {
+        showsTranscript || picker.visible || settingsVisible
     }
 
     var body: some View {
         Group {
             if picker.visible {
                 pickerOverlay
+            } else if settingsVisible {
+                SettingsView(onClose: closeSettings)
             } else {
                 mainContent
             }
         }
+        .tint(settings.accent)
         .frame(width: 680)
-        // A fixed height when there's a conversation (or the picker is open)
+        // A fixed height when there's a conversation (or an overlay is open)
         // gives the scroll area real space; otherwise size to the prompt bar.
-        .frame(height: (showsTranscript || picker.visible) ? 540 : nil)
+        .frame(height: showsFullHeight ? 540 : nil)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
@@ -35,6 +44,12 @@ struct SpotlightView: View {
             // Global ⌘P — open the picker from any state.
             Button("") { openPicker() }
                 .keyboardShortcut("p", modifiers: .command)
+                .opacity(0)
+        )
+        .background(
+            // Global ⌘, — toggle settings from any state.
+            Button("") { toggleSettings() }
+                .keyboardShortcut(",", modifiers: .command)
                 .opacity(0)
         )
         .onAppear {
@@ -71,13 +86,14 @@ struct SpotlightView: View {
             ZStack(alignment: .topLeading) {
                 if input.isEmpty {
                     Text("Ask fin…")
-                        .font(.system(size: 20, weight: .regular))
+                        .font(settings.font(20))
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
                 }
                 MultilineTextField(
                     text: $input,
                     focusToken: $focusToken,
+                    font: settings.promptNSFont(),
                     onSubmit: send,
                     onHeightChange: { h in inputHeight = h }
                 )
@@ -126,10 +142,10 @@ struct SpotlightView: View {
             HStack {
                 Spacer(minLength: 40)
                 Text(message.text)
-                    .font(.system(size: 14))
+                    .font(settings.font(14))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.12))
+                    .background(settings.accent.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .textSelection(.enabled)
             }
@@ -149,6 +165,11 @@ struct SpotlightView: View {
                     .lineLimit(1)
             }
             Spacer()
+            Button(action: toggleSettings) {
+                footerLabel("Settings", systemImage: "gearshape", shortcut: "⌘,")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
             if vm.messages.isEmpty {
                 Button(action: openPicker) {
                     footerLabel("Previous chat", systemImage: "clock.arrow.circlepath", shortcut: "⌘P")
@@ -246,7 +267,7 @@ struct SpotlightView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(index == picker.selection ? Color.accentColor.opacity(0.20) : Color.clear)
+        .background(index == picker.selection ? settings.accent.opacity(0.20) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
         .onTapGesture { picker.choose(index) }
@@ -280,12 +301,24 @@ struct SpotlightView: View {
         if picker.visible {
             picker.hide()
             focusToken += 1
+        } else if settingsVisible {
+            closeSettings()
         } else if vm.pendingApproval != nil {
             vm.deny()
             focusToken += 1
         } else {
             NSApplication.shared.terminate(nil)
         }
+    }
+
+    private func toggleSettings() {
+        guard !picker.visible else { return }
+        if settingsVisible { closeSettings() } else { settingsVisible = true }
+    }
+
+    private func closeSettings() {
+        settingsVisible = false
+        focusToken += 1
     }
 
     // MARK: - Actions

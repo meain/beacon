@@ -4,6 +4,7 @@ import SwiftUI
 /// blocks. Re-parses on each update, which is fine for streaming popup content.
 struct MarkdownView: View {
     let markdown: String
+    @ObservedObject private var settings = AppSettings.shared
 
     private var blocks: [MarkdownBlock] { MarkdownParser.parse(markdown) }
 
@@ -27,7 +28,7 @@ struct MarkdownView: View {
 
         case .paragraph(let text):
             Text(MarkdownParser.inline(text))
-                .font(.system(size: 14))
+                .font(settings.font(14))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -36,7 +37,7 @@ struct MarkdownView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .top, spacing: 8) {
                         Text("•").foregroundStyle(.secondary)
-                        Text(MarkdownParser.inline(item)).font(.system(size: 14))
+                        Text(MarkdownParser.inline(item)).font(settings.font(14))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -47,7 +48,7 @@ struct MarkdownView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
                     HStack(alignment: .top, spacing: 8) {
                         Text("\(idx + 1).").foregroundStyle(.secondary).monospacedDigit()
-                        Text(MarkdownParser.inline(item)).font(.system(size: 14))
+                        Text(MarkdownParser.inline(item)).font(settings.font(14))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -58,9 +59,9 @@ struct MarkdownView: View {
 
         case .blockquote(let text):
             HStack(spacing: 8) {
-                Rectangle().fill(Color.accentColor.opacity(0.5)).frame(width: 3)
+                Rectangle().fill(settings.accent.opacity(0.5)).frame(width: 3)
                 Text(MarkdownParser.inline(text))
-                    .font(.system(size: 14))
+                    .font(settings.font(14))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -72,9 +73,9 @@ struct MarkdownView: View {
 
     private func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: return .system(size: 20)
-        case 2: return .system(size: 17)
-        default: return .system(size: 15)
+        case 1: return settings.font(20)
+        case 2: return settings.font(17)
+        default: return settings.font(15)
         }
     }
 }
@@ -83,6 +84,7 @@ struct MarkdownView: View {
 struct CodeBlockView: View {
     let language: String
     let code: String
+    @ObservedObject private var settings = AppSettings.shared
     @State private var copied = false
 
     var body: some View {
@@ -107,7 +109,7 @@ struct CodeBlockView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(SyntaxHighlighter.highlight(code, language: language))
-                    .font(.system(size: 12.5, design: .monospaced))
+                    .font(settings.mono(12.5))
                     .textSelection(.enabled)
                     .padding(10)
             }

@@ -107,7 +107,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func resign() {
-        NSApp.terminate(nil)
+        // The panel loses key focus both when the user clicks away (should close)
+        // and when one of our own auxiliary windows takes focus — the color
+        // picker opened from Settings, or a popup font menu (should NOT close).
+        // Defer a runloop tick, then only terminate if the whole app is now
+        // inactive (i.e. another app is frontmost).
+        DispatchQueue.main.async {
+            if !NSApp.isActive { NSApp.terminate(nil) }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

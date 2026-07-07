@@ -6,6 +6,7 @@ struct ApprovalView: View {
     let request: ApprovalRequest
     let onApprove: () -> Void
     let onDeny: () -> Void
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -13,13 +14,13 @@ struct ApprovalView: View {
                 Image(systemName: "exclamationmark.shield.fill")
                     .foregroundStyle(.orange)
                 Text("Approve \(request.name)?")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(settings.font(13, weight: .semibold))
             }
 
             if let arg = request.primaryArg {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(arg)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(settings.mono(12))
                         .textSelection(.enabled)
                         .padding(8)
                 }

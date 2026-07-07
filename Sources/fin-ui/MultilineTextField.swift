@@ -7,6 +7,8 @@ struct MultilineTextField: NSViewRepresentable {
     @Binding var text: String
     /// Increment to request focus (token-based so repeated requests fire).
     @Binding var focusToken: Int
+    /// The input font, resolved from the user's appearance settings.
+    var font: NSFont
     var onSubmit: () -> Void
     var onHeightChange: ((CGFloat) -> Void)?
 
@@ -14,7 +16,7 @@ struct MultilineTextField: NSViewRepresentable {
         let textView = SubmitTextView()
         textView.onSubmit = onSubmit
         textView.isRichText = false
-        textView.font = .systemFont(ofSize: 20)
+        textView.font = font
         textView.drawsBackground = false
         textView.isEditable = true
         textView.isSelectable = true
@@ -41,6 +43,11 @@ struct MultilineTextField: NSViewRepresentable {
         guard let textView = nsView.documentView as? SubmitTextView else { return }
         textView.onSubmit = onSubmit
         context.coordinator.onHeightChange = onHeightChange
+
+        if textView.font != font {
+            textView.font = font
+            context.coordinator.recalculateHeight(textView)
+        }
 
         if textView.string != text {
             let sel = textView.selectedRange()

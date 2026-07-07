@@ -3,6 +3,7 @@ import SwiftUI
 /// A compact row showing a tool invocation and its state.
 struct ToolCallView: View {
     @ObservedObject var tool: ToolCall
+    @ObservedObject private var settings = AppSettings.shared
     @State private var expanded = false
 
     var body: some View {
@@ -10,10 +11,10 @@ struct ToolCallView: View {
             HStack(spacing: 8) {
                 statusIcon
                 Text(tool.name)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(settings.mono(12, weight: .semibold))
                 if let arg = tool.primaryArg {
                     Text(arg)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(settings.mono(12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -32,7 +33,7 @@ struct ToolCallView: View {
             if expanded, let detail = detailText {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(detail)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(settings.mono(11.5))
                         .foregroundStyle(tool.errorText != nil ? .red : .primary)
                         .textSelection(.enabled)
                 }
@@ -41,7 +42,7 @@ struct ToolCallView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(Color.accentColor.opacity(0.06))
+        .background(settings.accent.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 

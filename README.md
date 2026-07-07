@@ -65,6 +65,9 @@ hotkey to launch it gives a true Spotlight experience. Bind `open -a fin-ui` (or
 - **Approvals**: fin-ui honours your fin config's approval settings (`settings.approve`
   plus per-tool `approval`). Whenever fin asks for confirmation, an inline card appears —
   ⌘⏎ approves, Esc denies. (With `settings.approve = "all"`, everything auto-runs.)
+- **Settings** (⌘,): choose the proportional and monospaced font families, the text
+  size, and an accent color. Also links out to edit `~/.config/fin/config.toml` and to
+  fin's docs. Preferences persist in `UserDefaults` and apply live across the transcript.
 - Code blocks are syntax-highlighted with a copy button.
 - **Window position**: opens centered on first run; drag it and the position is
   remembered (persisted in `UserDefaults`) for next launch.
@@ -80,6 +83,7 @@ Fully keyboard driven — no mouse needed for the core flow.
 | `⌘⏎` | approve a tool call |
 | `⌘N` | new chat |
 | `⌘P` | open previous-chat picker (↑/↓ navigate, ⏎ open, esc cancel) |
+| `⌘,` | open settings (fonts, text size, accent color) |
 | `⌘W` / `⌘Q` | close / quit |
 | `⌘C` / `⌘V` / `⌘A` | standard editing in the prompt field |
 
@@ -92,8 +96,11 @@ Sources/fin-ui/
   ChatViewModel.swift   state, event handling, session chaining, load-previous
   FinRunner.swift       spawns fin, streams JSONL, writes approvals, exports last session
   Models.swift          wire events + view models + export structs
+  AppSettings.swift     persisted font/color preferences (shared singleton)
+  SettingsView.swift    in-panel settings overlay (fonts, size, accent, fin links)
   MarkdownParser.swift  block-level markdown → elements
   MarkdownView.swift    renders blocks (+ CodeBlockView)
+  MultilineTextField.swift  AppKit-backed prompt input (⏎ submit, ⇧⏎ newline)
   SyntaxHighlighter.swift  light-theme tokeniser
   ToolCallView.swift    tool row
   ApprovalView.swift    approval card

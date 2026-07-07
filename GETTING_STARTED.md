@@ -49,6 +49,7 @@ fin-ui is fully keyboard driven — no mouse needed for the core flow.
 | `esc` | close the popup (deny a pending approval first) |
 | `⌘N` | new chat (clears the window) |
 | `⌘P` | open the previous-chat picker (↑/↓ navigate, ⏎ open, esc cancel) |
+| `⌘,` | open settings (fonts, text size, accent color) |
 | `⌘⏎` | approve a tool call |
 | `esc` | deny a tool call (when an approval card is showing) |
 | `⌘W` / `⌘Q` | close / quit |
