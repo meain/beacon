@@ -19,6 +19,9 @@ final class ChatViewModel: ObservableObject {
     /// True once this window has completed at least one turn — subsequent turns
     /// chain onto it so the conversation flows naturally.
     private var hasHadTurn = false
+    /// The specific fin session loaded from the picker; follow-ups target it
+    /// with `-s <id>` rather than `-c`.
+    private var currentSessionID: String?
 
     init() {
         runner.onEvent = { [weak self] event in self?.handle(event) }
@@ -39,23 +42,36 @@ final class ChatViewModel: ObservableObject {
         isBusy = true
         statusText = nil
 
-        runner.start(prompt: trimmed, continueSession: hasHadTurn, model: nil)
+        let continuation: FinRunner.Continuation
+        if let sid = currentSessionID {
+            continuation = .session(sid)
+        } else if hasHadTurn {
+            continuation = .last
+        } else {
+            continuation = .fresh
+        }
+        runner.start(prompt: trimmed, continuation: continuation, model: nil)
     }
 
-    /// Load fin's last saved session into the transcript. Follow-up messages
-    /// then continue it (`-c`).
-    func loadPreviousChat() {
-        guard !isBusy, messages.isEmpty else { return }
+    /// Fetch the recent session list for the picker.
+    func listSessions(_ completion: @escaping ([SessionSummary]) -> Void) {
+        runner.listSessions(limit: 50, completion: completion)
+    }
+
+    /// Load a specific session into the transcript. Follow-ups continue it.
+    func loadSession(id: String) {
+        guard !isBusy else { return }
         isBusy = true
-        statusText = "loading previous chat…"
-        runner.loadLastSession { [weak self] title, loaded in
+        statusText = "loading chat…"
+        runner.loadSession(id: id) { [weak self] sid, title, loaded in
             guard let self else { return }
             self.isBusy = false
             guard !loaded.isEmpty else {
-                self.statusText = "no previous chat found"
+                self.statusText = "could not load chat"
                 return
             }
             self.messages = loaded.map { ChatMessage(role: $0.role, text: $0.text) }
+            self.currentSessionID = sid ?? id
             self.hasHadTurn = true
             self.statusText = title
             self.streamTick &+= 1
@@ -69,6 +85,7 @@ final class ChatViewModel: ObservableObject {
         currentAssistant = nil
         activeTools = [:]
         hasHadTurn = false
+        currentSessionID = nil
         pendingApproval = nil
         statusText = nil
     }

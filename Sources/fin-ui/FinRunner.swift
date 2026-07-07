@@ -68,16 +68,30 @@ final class FinRunner {
         return env.isEmpty ? fallback : env
     }()
 
-    /// Start a fin turn. `continueSession` chains onto the previous session.
-    func start(prompt: String, continueSession: Bool, model: String?) {
+    /// How a turn chains onto prior conversation.
+    enum Continuation {
+        case fresh                // brand new session
+        case last                 // continue the most recent session (-c)
+        case session(String)      // continue a specific session (-s <id>)
+
+        var args: [String] {
+            switch self {
+            case .fresh: return []
+            case .last: return ["-c"]
+            case .session(let id): return ["-s", id]
+            }
+        }
+    }
+
+    /// Start a fin turn.
+    func start(prompt: String, continuation: Continuation, model: String?) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: Self.resolveFinPath())
 
         // No -approve override: fin uses the approval mode from its config
         // (settings.approve + per-tool approval), prompting via the JSONL
         // approval events whenever the config asks for confirmation.
-        var args = ["-ui", "json"]
-        if continueSession { args.append("-c") }
+        var args = ["-ui", "json"] + continuation.args
         if let model, !model.isEmpty { args += ["-m", model] }
         args.append(prompt)
         proc.arguments = args
@@ -151,21 +165,24 @@ final class FinRunner {
         }
     }
 
-    /// Load fin's last saved session (`-export json -c`) and return its user /
-    /// assistant messages. Completion runs on the main queue.
-    func loadLastSession(completion: @escaping (_ title: String?, _ messages: [LoadedMessage]) -> Void) {
+    /// Export a session (`id` = specific, nil = last) and return its id, title
+    /// and user/assistant messages. Completion runs on the main queue.
+    func loadSession(id: String?,
+                     completion: @escaping (_ id: String?, _ title: String?, _ messages: [LoadedMessage]) -> Void) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: Self.resolveFinPath())
-        proc.arguments = ["-export", "json", "-c"]
+        proc.arguments = ["-export", "json"] + (id.map { ["-session", $0] } ?? ["-c"])
         proc.environment = Self.loginEnvironment
         let out = Pipe()
         proc.standardOutput = out
         proc.standardError = FileHandle.nullDevice
         proc.terminationHandler = { _ in
             let data = out.fileHandleForReading.readDataToEndOfFile()
+            var sid: String?
             var title: String?
             var loaded: [LoadedMessage] = []
             if let session = try? JSONDecoder().decode(ExportedSession.self, from: data) {
+                sid = session.id
                 title = session.title
                 for m in session.messages {
                     let role: ChatMessage.Role
@@ -179,10 +196,52 @@ final class FinRunner {
                     loaded.append(LoadedMessage(role: role, text: text))
                 }
             }
-            DispatchQueue.main.async { completion(title, loaded) }
+            DispatchQueue.main.async { completion(sid, title, loaded) }
         }
         do { try proc.run() } catch {
-            DispatchQueue.main.async { completion(nil, []) }
+            DispatchQueue.main.async { completion(nil, nil, []) }
+        }
+    }
+
+    /// List the most recent sessions by reading each JSONL file's header line.
+    /// Runs off the main thread; completion runs on the main queue.
+    func listSessions(limit: Int,
+                      completion: @escaping ([SessionSummary]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let home = Self.loginEnvironment["HOME"] ?? NSHomeDirectory()
+            let dir = URL(fileURLWithPath: home)
+                .appendingPathComponent(".local/share/fin/sessions")
+            let fm = FileManager.default
+            let urls = (try? fm.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles])) ?? []
+
+            let recent = urls
+                .filter { $0.pathExtension == "jsonl" }
+                .map { url -> (URL, Date) in
+                    let d = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
+                        .contentModificationDate) ?? .distantPast
+                    return (url, d)
+                }
+                .sorted { $0.1 > $1.1 }
+                .prefix(limit)
+
+            var result: [SessionSummary] = []
+            for (url, mtime) in recent {
+                guard let handle = try? FileHandle(forReadingFrom: url) else { continue }
+                defer { try? handle.close() }
+                // The header is the small first line; the system prompt (huge)
+                // is the second, so a bounded read is enough.
+                let chunk = (try? handle.read(upToCount: 8192)) ?? Data()
+                guard let nl = chunk.firstIndex(of: 0x0A) else { continue }
+                let headerData = chunk.subdata(in: chunk.startIndex..<nl)
+                guard let h = try? JSONDecoder().decode(SessionHeader.self, from: headerData)
+                else { continue }
+                let title = (h.title?.isEmpty == false) ? h.title! : h.id
+                result.append(SessionSummary(id: h.id, title: title, date: mtime))
+            }
+            DispatchQueue.main.async { completion(result) }
         }
     }
 

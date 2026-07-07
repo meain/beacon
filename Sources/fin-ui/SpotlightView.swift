@@ -4,6 +4,7 @@ import SwiftUI
 /// transcript below.
 struct SpotlightView: View {
     @StateObject private var vm = ChatViewModel()
+    @StateObject private var picker = PickerModel()
     @State private var input = ""
     @FocusState private var inputFocused: Bool
 
@@ -12,6 +13,41 @@ struct SpotlightView: View {
     }
 
     var body: some View {
+        Group {
+            if picker.visible {
+                pickerOverlay
+            } else {
+                mainContent
+            }
+        }
+        .frame(width: 680)
+        // A fixed height when there's a conversation (or the picker is open)
+        // gives the scroll area real space; otherwise size to the prompt bar.
+        .frame(height: (showsTranscript || picker.visible) ? 540 : nil)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .background(
+            // Global ⌘P — open the picker from any state.
+            Button("") { openPicker() }
+                .keyboardShortcut("p", modifiers: .command)
+                .opacity(0)
+        )
+        .onAppear {
+            inputFocused = true
+            picker.onSelect = { session in
+                inputFocused = true
+                vm.loadSession(id: session.id)
+            }
+            picker.onCancel = { inputFocused = true }
+        }
+        .onExitCommand(perform: handleEscape)
+    }
+
+    private var mainContent: some View {
         VStack(spacing: 0) {
             promptBar
             if showsTranscript {
@@ -19,26 +55,6 @@ struct SpotlightView: View {
                 transcript
             }
             footer
-        }
-        .frame(width: 680)
-        // A fixed height once there's a conversation gives the ScrollView real
-        // space to fill; otherwise the window sizes to the prompt bar alone.
-        .frame(height: showsTranscript ? 540 : nil)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
-        .onAppear { inputFocused = true }
-        // Esc denies a pending approval, otherwise closes the popup.
-        .onExitCommand {
-            if vm.pendingApproval != nil {
-                vm.deny()
-                inputFocused = true
-            } else {
-                NSApplication.shared.terminate(nil)
-            }
         }
     }
 
@@ -121,12 +137,11 @@ struct SpotlightView: View {
             }
             Spacer()
             if vm.messages.isEmpty {
-                Button(action: vm.loadPreviousChat) {
+                Button(action: openPicker) {
                     footerLabel("Previous chat", systemImage: "clock.arrow.circlepath", shortcut: "⌘P")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .keyboardShortcut("p", modifiers: .command)
                 .disabled(vm.isBusy)
             } else {
                 Button(action: vm.newChat) {
@@ -158,6 +173,94 @@ struct SpotlightView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 4))
         }
         .font(.system(size: 11))
+    }
+
+    // MARK: - Previous-chat picker
+
+    private var pickerOverlay: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.secondary)
+                Text("Go to previous chat")
+                    .font(.system(size: 16, weight: .medium))
+                Spacer()
+                Text("↑↓ navigate · ⏎ open · esc cancel")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(Array(picker.sessions.enumerated()), id: \.element.id) { i, session in
+                            pickerRow(index: i, session: session)
+                                .id(i)
+                        }
+                        if picker.sessions.isEmpty {
+                            Text("No previous chats")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 24)
+                        }
+                    }
+                    .padding(8)
+                }
+                .onChange(of: picker.selection) {
+                    withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo(picker.selection) }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func pickerRow(index: Int, session: SessionSummary) -> some View {
+        HStack(spacing: 10) {
+            Text(session.title)
+                .font(.system(size: 13))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 12)
+            Text(Self.relativeFormatter.localizedString(for: session.date, relativeTo: Date()))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(index == picker.selection ? Color.accentColor.opacity(0.20) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .contentShape(Rectangle())
+        .onTapGesture { picker.choose(index) }
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+
+    private func openPicker() {
+        guard !vm.isBusy, !picker.visible else { return }
+        inputFocused = false
+        vm.listSessions { list in picker.show(list) }
+    }
+
+    private func handleEscape() {
+        if picker.visible {
+            picker.hide()
+            inputFocused = true
+        } else if vm.pendingApproval != nil {
+            vm.deny()
+            inputFocused = true
+        } else {
+            NSApplication.shared.terminate(nil)
+        }
     }
 
     // MARK: - Actions

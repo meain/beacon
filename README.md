@@ -55,8 +55,9 @@ hotkey to launch it gives a true Spotlight experience. Bind `open -a fin-ui` (or
 ## Behaviour
 
 - **One-off by default**: each launch starts a fresh `fin` session.
-- **Previous chat** (⌘P): loads `fin`'s last saved session into the transcript; follow-up
-  messages then continue it (`-c`). Follow-ups within an open window always chain.
+- **Previous chat** (⌘P): opens a picker of your last 50 sessions (↑/↓ navigate, ⏎ open,
+  Esc cancel) from any state, including mid-conversation. The chosen session loads into the
+  transcript and follow-ups continue that specific session (`-s <id>`).
 - **New chat** (⌘N) resets the window.
 - **Approvals**: fin-ui honours your fin config's approval settings (`settings.approve`
   plus per-tool `approval`). Whenever fin asks for confirmation, an inline card appears —
@@ -75,7 +76,7 @@ Fully keyboard driven — no mouse needed for the core flow.
 | `esc` | close (deny a pending approval first) |
 | `⌘⏎` | approve a tool call |
 | `⌘N` | new chat |
-| `⌘P` | load previous chat |
+| `⌘P` | open previous-chat picker (↑/↓ navigate, ⏎ open, esc cancel) |
 | `⌘W` / `⌘Q` | close / quit |
 | `⌘C` / `⌘V` / `⌘A` | standard editing in the prompt field |
 

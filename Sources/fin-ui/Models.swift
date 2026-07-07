@@ -85,6 +85,19 @@ struct LoadedMessage {
     let text: String
 }
 
+/// The first line of a session JSONL file.
+struct SessionHeader: Decodable {
+    let id: String
+    let title: String?
+}
+
+/// A previous session shown in the picker.
+struct SessionSummary: Identifiable {
+    let id: String
+    let title: String
+    let date: Date
+}
+
 // MARK: - View models for rendered content
 
 /// A single tool invocation shown in the transcript.
