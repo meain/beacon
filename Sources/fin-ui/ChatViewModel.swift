@@ -9,6 +9,9 @@ final class ChatViewModel: ObservableObject {
     @Published var pendingApproval: ApprovalRequest?
     @Published var isBusy: Bool = false
     @Published var statusText: String?
+    /// Bumped on every content-changing event so the view can auto-scroll
+    /// (SpotlightView doesn't otherwise observe nested message updates).
+    @Published var streamTick: Int = 0
     /// When set for a fresh window, the first turn continues fin's last saved
     /// session instead of starting one-off. Default off.
     @Published var continuePrevious: Bool = false
@@ -71,6 +74,7 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Event handling
 
     private func handle(_ event: FinEvent) {
+        defer { streamTick &+= 1 }
         switch event.t {
         case "text":
             if let text = event.text { currentAssistant?.text += text }
