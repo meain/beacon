@@ -92,6 +92,9 @@ final class FinRunner {
         // (settings.approve + per-tool approval), prompting via the JSONL
         // approval events whenever the config asks for confirmation.
         var args = ["-ui", "json"] + continuation.args
+        // Tag every session started from fin-ui so the picker only shows our own.
+        // For .fresh this tags the new session; for .last it filters to our last one.
+        if case .session = continuation { } else { args += ["-tag", "fin-ui"] }
         if let model, !model.isEmpty { args += ["-m", model] }
         args.append(prompt)
         proc.arguments = args
@@ -264,6 +267,7 @@ final class FinRunner {
                 let headerData = chunk.subdata(in: chunk.startIndex..<nl)
                 guard let h = try? JSONDecoder().decode(SessionHeader.self, from: headerData)
                 else { continue }
+                guard h.tags?.contains("fin-ui") == true else { continue }
                 let title = (h.title?.isEmpty == false) ? h.title! : h.id
                 result.append(SessionSummary(id: h.id, title: title, date: mtime, url: url))
             }

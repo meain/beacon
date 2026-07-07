@@ -105,6 +105,7 @@ struct LoadedMessage {
 struct SessionHeader: Decodable {
     let id: String
     let title: String?
+    let tags: [String]?
 }
 
 /// A previous session shown in the picker.

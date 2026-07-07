@@ -6,7 +6,8 @@ struct SpotlightView: View {
     @StateObject private var vm = ChatViewModel()
     @StateObject private var picker = PickerModel()
     @State private var input = ""
-    @FocusState private var inputFocused: Bool
+    @State private var focusToken = 0
+    @State private var inputHeight: CGFloat = 24
 
     private var showsTranscript: Bool {
         !vm.messages.isEmpty || vm.pendingApproval != nil
@@ -37,12 +38,12 @@ struct SpotlightView: View {
                 .opacity(0)
         )
         .onAppear {
-            inputFocused = true
+            focusToken += 1
             picker.onSelect = { session in
-                inputFocused = true
+                self.focusToken += 1
                 vm.loadSession(session)
             }
-            picker.onCancel = { inputFocused = true }
+            picker.onCancel = { self.focusToken += 1 }
         }
         .onExitCommand(perform: handleEscape)
     }
@@ -61,22 +62,31 @@ struct SpotlightView: View {
     // MARK: - Prompt bar
 
     private var promptBar: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: "sparkle")
                 .font(.system(size: 18))
                 .foregroundStyle(.secondary)
+                .padding(.top, 3)
 
-            TextField("Ask fin…", text: $input)
-                .textFieldStyle(.plain)
-                .font(.system(size: 20, weight: .regular))
-                .focused($inputFocused)
-                .onSubmit(send)
-                // Fires on launch and whenever we return from the picker, once
-                // the field is actually back in the hierarchy.
-                .onAppear { DispatchQueue.main.async { inputFocused = true } }
+            ZStack(alignment: .topLeading) {
+                if input.isEmpty {
+                    Text("Ask fin…")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                        .allowsHitTesting(false)
+                }
+                MultilineTextField(
+                    text: $input,
+                    focusToken: $focusToken,
+                    onSubmit: send,
+                    onHeightChange: { h in inputHeight = h }
+                )
+                .frame(height: min(max(24, inputHeight), 120))
+            }
 
             if vm.isBusy {
                 ProgressView().controlSize(.small)
+                    .padding(.top, 3)
             }
         }
         .padding(.horizontal, 20)
@@ -155,7 +165,7 @@ struct SpotlightView: View {
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(vm.isBusy)
             }
-            Text("⏎ send · esc close")
+            Text("⏎ send · ⇧⏎ newline · esc close")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
         }
@@ -250,17 +260,29 @@ struct SpotlightView: View {
 
     private func openPicker() {
         guard !vm.isBusy, !picker.visible else { return }
-        inputFocused = false
-        vm.listSessions { list in picker.show(list) }
+        if vm.messages.isEmpty {
+            // No active chat: jump directly to the most recent session.
+            vm.listSessions { list in
+                if let first = list.first {
+                    self.vm.loadSession(first)
+                    self.focusToken += 1
+                } else {
+                    self.picker.show(list)
+                }
+            }
+        } else {
+            // Already in a chat: show picker to switch.
+            vm.listSessions { list in picker.show(list) }
+        }
     }
 
     private func handleEscape() {
         if picker.visible {
             picker.hide()
-            inputFocused = true
+            focusToken += 1
         } else if vm.pendingApproval != nil {
             vm.deny()
-            inputFocused = true
+            focusToken += 1
         } else {
             NSApplication.shared.terminate(nil)
         }
@@ -272,8 +294,9 @@ struct SpotlightView: View {
         guard vm.canSubmit else { return }
         let prompt = input
         input = ""
+        inputHeight = 24
         vm.submit(prompt)
-        inputFocused = true
+        focusToken += 1
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
