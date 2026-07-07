@@ -306,23 +306,39 @@ struct SpotlightView: View {
     }
 }
 
-/// An assistant turn: streamed markdown plus any tool calls, in order.
+/// An assistant turn: text blocks and tool calls rendered in the order fin
+/// produced them.
 struct AssistantMessageView: View {
     @ObservedObject var message: ChatMessage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(message.tools) { tool in
-                ToolCallView(tool: tool)
+            ForEach(message.segments) { segment in
+                switch segment {
+                case .text(let text):
+                    TextSegmentView(segment: text)
+                case .tool(let tool):
+                    ToolCallView(tool: tool)
+                }
             }
-            if !message.text.isEmpty {
-                MarkdownView(markdown: message.text)
-            } else if message.streaming && message.tools.isEmpty {
+            if message.segments.isEmpty && message.streaming {
                 Text("Thinking…")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A single streamed markdown block, observing its segment so it re-renders as
+/// deltas arrive.
+struct TextSegmentView: View {
+    @ObservedObject var segment: TextSegment
+
+    var body: some View {
+        if !segment.text.isEmpty {
+            MarkdownView(markdown: segment.text)
+        }
     }
 }

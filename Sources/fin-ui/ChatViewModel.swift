@@ -15,6 +15,10 @@ final class ChatViewModel: ObservableObject {
 
     private let runner = FinRunner()
     private var currentAssistant: ChatMessage?
+    /// The text block currently being streamed. Reset when a tool starts or the
+    /// block ends, so the next text after a tool becomes a fresh ordered segment
+    /// rather than being appended to the previous block.
+    private var currentTextSegment: TextSegment?
     private var activeTools: [Int: ToolCall] = [:]
     /// True once this window has completed at least one turn — subsequent turns
     /// chain onto it so the conversation flows naturally.
@@ -38,6 +42,7 @@ final class ChatViewModel: ObservableObject {
         let assistant = ChatMessage(role: .assistant, streaming: true)
         messages.append(assistant)
         currentAssistant = assistant
+        currentTextSegment = nil
         activeTools = [:]
         isBusy = true
         statusText = nil
@@ -72,12 +77,21 @@ final class ChatViewModel: ObservableObject {
                 return
             }
             self.messages = loaded.map { lm in
-                let msg = ChatMessage(role: lm.role, text: lm.text)
-                msg.tools = lm.tools.enumerated().map { i, lt in
-                    let tool = ToolCall(index: i, name: lt.name, args: lt.args)
-                    tool.running = false
-                    tool.result = lt.result
-                    return tool
+                // User turns keep plain text; assistant turns are rebuilt as
+                // ordered segments (text block, if any, then its tool calls —
+                // the order fin persists them in an assistant message).
+                let msg = ChatMessage(role: lm.role,
+                                      text: lm.role == .user ? lm.text : "")
+                if lm.role == .assistant {
+                    if !lm.text.isEmpty {
+                        msg.segments.append(.text(TextSegment(lm.text)))
+                    }
+                    for (i, lt) in lm.tools.enumerated() {
+                        let tool = ToolCall(index: i, name: lt.name, args: lt.args)
+                        tool.running = false
+                        tool.result = lt.result
+                        msg.segments.append(.tool(tool))
+                    }
                 }
                 return msg
             }
@@ -93,6 +107,7 @@ final class ChatViewModel: ObservableObject {
         guard !isBusy else { return }
         messages.removeAll()
         currentAssistant = nil
+        currentTextSegment = nil
         activeTools = [:]
         hasHadTurn = false
         currentSessionID = nil
@@ -120,16 +135,19 @@ final class ChatViewModel: ObservableObject {
         defer { streamTick &+= 1 }
         switch event.t {
         case "text":
-            if let text = event.text { currentAssistant?.text += text }
+            if let text = event.text { appendText(text) }
 
         case "end":
-            break // A text block ended; the turn may continue with tools.
+            // A text block ended; the next text starts a fresh ordered segment.
+            currentTextSegment = nil
 
         case "tool_start":
             guard let idx = event.idx, idx >= 0, let name = event.name else { return }
             let tool = ToolCall(index: idx, name: name, args: event.args ?? [:])
             activeTools[idx] = tool
-            currentAssistant?.tools.append(tool)
+            currentAssistant?.segments.append(.tool(tool))
+            // Any text after this tool belongs to a new block below it.
+            currentTextSegment = nil
 
         case "tool_output":
             if let idx = event.idx, let tool = activeTools[idx] {
@@ -165,9 +183,10 @@ final class ChatViewModel: ObservableObject {
             let msg = (event.text ?? event.error ?? "unknown error")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !msg.isEmpty else { return }
-            if let assistant = currentAssistant {
-                let prefix = assistant.text.isEmpty ? "" : "\n\n"
-                assistant.text += "\(prefix)> ⚠️ \(msg)"
+            if currentAssistant != nil {
+                let seg = ensureTextSegment()
+                let prefix = seg?.text.isEmpty == false ? "\n\n" : ""
+                seg?.text += "\(prefix)> ⚠️ \(msg)"
             } else {
                 statusText = msg
             }
@@ -177,9 +196,27 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Append a streamed text delta to the current block, opening one if needed.
+    private func appendText(_ text: String) {
+        ensureTextSegment()?.text += text
+    }
+
+    /// The open text block, creating and appending it to the current assistant
+    /// turn if none is active. Returns nil if there's no assistant turn.
+    @discardableResult
+    private func ensureTextSegment() -> TextSegment? {
+        guard let assistant = currentAssistant else { return nil }
+        if let seg = currentTextSegment { return seg }
+        let seg = TextSegment()
+        assistant.segments.append(.text(seg))
+        currentTextSegment = seg
+        return seg
+    }
+
     private func finishTurn() {
         currentAssistant?.streaming = false
         currentAssistant = nil
+        currentTextSegment = nil
         isBusy = false
         hasHadTurn = true
         pendingApproval = nil

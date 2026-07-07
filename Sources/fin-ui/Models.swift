@@ -158,13 +158,40 @@ struct ApprovalRequest: Identifiable {
     }
 }
 
+/// A streamed block of assistant markdown text. Its own observable object so a
+/// growing block re-renders in place without disturbing sibling segments.
+final class TextSegment: Identifiable, ObservableObject {
+    let id = UUID()
+    @Published var text: String
+
+    init(_ text: String = "") { self.text = text }
+}
+
+/// One ordered piece of an assistant turn. fin interleaves text blocks and tool
+/// calls ("say this, run that, say more, run that"); the transcript must render
+/// them in that order, so a turn is a sequence of these rather than a single
+/// text blob plus a tools array.
+enum AssistantSegment: Identifiable {
+    case text(TextSegment)
+    case tool(ToolCall)
+
+    var id: UUID {
+        switch self {
+        case .text(let t): return t.id
+        case .tool(let t): return t.id
+        }
+    }
+}
+
 /// A turn in the conversation transcript.
 final class ChatMessage: Identifiable, ObservableObject {
     enum Role { case user, assistant }
     let id = UUID()
     let role: Role
+    /// Plain text for user turns; assistant turns use `segments` instead.
     @Published var text: String
-    @Published var tools: [ToolCall] = []
+    /// Ordered text/tool segments for assistant turns.
+    @Published var segments: [AssistantSegment] = []
     @Published var streaming: Bool
 
     init(role: Role, text: String = "", streaming: Bool = false) {
