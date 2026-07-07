@@ -71,6 +71,9 @@ struct SpotlightView: View {
                 .font(.system(size: 20, weight: .regular))
                 .focused($inputFocused)
                 .onSubmit(send)
+                // Fires on launch and whenever we return from the picker, once
+                // the field is actually back in the hierarchy.
+                .onAppear { DispatchQueue.main.async { inputFocused = true } }
 
             if vm.isBusy {
                 ProgressView().controlSize(.small)
