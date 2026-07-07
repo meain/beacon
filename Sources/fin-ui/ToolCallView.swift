@@ -1,0 +1,66 @@
+import SwiftUI
+
+/// A compact row showing a tool invocation and its state.
+struct ToolCallView: View {
+    @ObservedObject var tool: ToolCall
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                statusIcon
+                Text(tool.name)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                if let arg = tool.primaryArg {
+                    Text(arg)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+                if hasDetail {
+                    Button(action: { expanded.toggle() }) {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if expanded, let detail = detailText {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(detail)
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(tool.errorText != nil ? .red : .primary)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 160)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.accentColor.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var hasDetail: Bool { detailText?.isEmpty == false }
+
+    private var detailText: String? {
+        if let err = tool.errorText, !err.isEmpty { return err }
+        if let res = tool.result, !res.isEmpty { return res }
+        return nil
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        if tool.running {
+            ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 14, height: 14)
+        } else if tool.errorText != nil {
+            Image(systemName: "xmark.circle.fill").foregroundStyle(.red).font(.system(size: 12))
+        } else {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.system(size: 12))
+        }
+    }
+}

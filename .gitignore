@@ -1,0 +1,4 @@
+.build/
+fin-ui.app/
+*.swiftpm
+.DS_Store
