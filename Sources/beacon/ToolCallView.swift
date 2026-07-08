@@ -50,6 +50,12 @@ struct ToolCallView: View {
 
     private var detailText: String? {
         if let err = tool.errorText, !err.isEmpty { return err }
+        if let old = tool.args["old_string"]?.displayString,
+           let new = tool.args["new_string"]?.displayString {
+            var text = "--- old\n\(old)\n\n+++ new\n\(new)"
+            if let res = tool.result, !res.isEmpty { text += "\n\n" + res }
+            return text
+        }
         if let res = tool.result, !res.isEmpty { return res }
         return nil
     }
