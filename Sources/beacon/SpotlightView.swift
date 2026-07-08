@@ -16,7 +16,7 @@ struct SpotlightView: View {
     }
 
     private var showsFullHeight: Bool {
-        showsTranscript || picker.visible || settingsVisible
+        showsTranscript || picker.visible || settingsVisible || vm.isResolvingAutoResume
     }
 
     var body: some View {

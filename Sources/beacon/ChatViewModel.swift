@@ -9,6 +9,9 @@ final class ChatViewModel: ObservableObject {
     @Published var pendingApproval: ApprovalRequest?
     @Published var isBusy: Bool = false
     @Published var statusText: String?
+    /// True while the startup auto-resume check is in flight; the view stays
+    /// at full height during this window so there's no expansion flash.
+    @Published var isResolvingAutoResume: Bool = false
     /// Bumped on every content-changing event so the view can auto-scroll
     /// (SpotlightView doesn't otherwise observe nested message updates).
     @Published var streamTick: Int = 0
@@ -28,10 +31,37 @@ final class ChatViewModel: ObservableObject {
     private var currentSessionID: String?
 
     private let lastNewChatKey = "fin.chat.lastExplicitNewChat"
+    private let lastSessionURLKey = "fin.chat.lastSessionURL"
 
     init() {
-        runner.onEvent = { [weak self] event in self?.handle(event) }
-        runner.onExit = { [weak self] in self?.finishTurn() }
+        if let url = Self.cachedResumeURL() {
+            isResolvingAutoResume = true
+            isBusy = true
+            statusText = "loading chat…"
+            runner.onEvent = { [weak self] event in self?.handle(event) }
+            runner.onExit = { [weak self] in self?.finishTurn() }
+            loadSessionFromURL(url, fallbackID: nil)
+        } else {
+            runner.onEvent = { [weak self] event in self?.handle(event) }
+            runner.onExit = { [weak self] in self?.finishTurn() }
+        }
+    }
+
+    /// Synchronous check: returns the URL of the most recent beacon session if
+    /// it was active within the last 5 minutes and the user hasn't started a
+    /// new chat more recently. Reads only UserDefaults + a single file stat.
+    private static func cachedResumeURL() -> URL? {
+        let d = UserDefaults.standard
+        guard let urlStr = d.string(forKey: "fin.chat.lastSessionURL"),
+              let url = URL(string: urlStr) else { return nil }
+        let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate) ?? .distantPast
+        guard mtime > Date().addingTimeInterval(-5 * 60) else { return nil }
+        if d.object(forKey: "fin.chat.lastExplicitNewChat") != nil {
+            let newChatTime = Date(timeIntervalSinceReferenceDate: d.double(forKey: "fin.chat.lastExplicitNewChat"))
+            if newChatTime > mtime { return nil }
+        }
+        return url
     }
 
     /// Called on launch. Loads the most recent session automatically if it had
@@ -88,9 +118,15 @@ final class ChatViewModel: ObservableObject {
         guard !isBusy else { return }
         isBusy = true
         statusText = "loading chat…"
-        runner.loadSession(url: summary.url) { [weak self] sid, title, loaded in
+        UserDefaults.standard.set(summary.url.absoluteString, forKey: lastSessionURLKey)
+        loadSessionFromURL(summary.url, fallbackID: summary.id)
+    }
+
+    private func loadSessionFromURL(_ url: URL, fallbackID: String?) {
+        runner.loadSession(url: url) { [weak self] sid, title, loaded in
             guard let self else { return }
             self.isBusy = false
+            self.isResolvingAutoResume = false
             guard !loaded.isEmpty else {
                 self.statusText = "could not load chat"
                 return
@@ -114,7 +150,7 @@ final class ChatViewModel: ObservableObject {
                 }
                 return msg
             }
-            self.currentSessionID = sid ?? summary.id
+            self.currentSessionID = sid ?? fallbackID
             self.hasHadTurn = true
             self.statusText = title
             self.streamTick &+= 1
