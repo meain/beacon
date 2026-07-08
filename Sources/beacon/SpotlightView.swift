@@ -130,6 +130,7 @@ struct SpotlightView: View {
                 .padding(20)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { DispatchQueue.main.async { scrollToBottom(proxy) } }
             .onChange(of: vm.streamTick) { scrollToBottom(proxy) }
             .onChange(of: vm.messages.count) { scrollToBottom(proxy) }
             .onChange(of: vm.pendingApproval?.id) { scrollToBottom(proxy) }

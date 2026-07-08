@@ -3,3 +3,4 @@ fin-ui.app/
 beacon.app/
 *.swiftpm
 .DS_Store
+beacon.app.zip
