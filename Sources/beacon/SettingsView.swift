@@ -136,13 +136,27 @@ struct SettingsView: View {
 
     private var finSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("beacon")
+            linkRow("Getting started", detail: "github.com/meain/beacon/blob/master/GETTING_STARTED.md",
+                    systemImage: "book") {
+                if let url = URL(string: "https://github.com/meain/beacon/blob/master/GETTING_STARTED.md") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            linkRow("beacon on GitHub", detail: "github.com/meain/beacon",
+                    systemImage: "square.and.arrow.up") {
+                if let url = URL(string: "https://github.com/meain/beacon") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+
             sectionTitle("fin")
             linkRow("Edit fin config", detail: "~/.config/fin/config.toml",
                     systemImage: "doc.text") {
                 NSWorkspace.shared.open(URL(fileURLWithPath: finConfigPath))
             }
-            linkRow("Getting started & documentation", detail: "github.com/meain/fin",
-                    systemImage: "book") {
+            linkRow("fin on GitHub", detail: "github.com/meain/fin",
+                    systemImage: "square.and.arrow.up") {
                 if let url = URL(string: "https://github.com/meain/fin") {
                     NSWorkspace.shared.open(url)
                 }
