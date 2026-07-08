@@ -27,9 +27,28 @@ final class ChatViewModel: ObservableObject {
     /// with `-s <id>` rather than `-c`.
     private var currentSessionID: String?
 
+    private let lastNewChatKey = "fin.chat.lastExplicitNewChat"
+
     init() {
         runner.onEvent = { [weak self] event in self?.handle(event) }
         runner.onExit = { [weak self] in self?.finishTurn() }
+    }
+
+    /// Called on launch. Loads the most recent session automatically if it had
+    /// activity within the last 5 minutes and the user hasn't explicitly started
+    /// a new chat more recently than that session's last message.
+    func autoResumeIfNeeded() {
+        listSessions { [weak self] sessions in
+            guard let self else { return }
+            guard let recent = sessions.first else { return }
+            guard recent.date > Date().addingTimeInterval(-5 * 60) else { return }
+            let d = UserDefaults.standard
+            if d.object(forKey: self.lastNewChatKey) != nil {
+                let newChatTime = Date(timeIntervalSinceReferenceDate: d.double(forKey: self.lastNewChatKey))
+                if newChatTime > recent.date { return }
+            }
+            self.loadSession(recent)
+        }
     }
 
     var canSubmit: Bool { !isBusy }
@@ -105,6 +124,7 @@ final class ChatViewModel: ObservableObject {
     /// Reset the window for a brand-new conversation.
     func newChat() {
         guard !isBusy else { return }
+        UserDefaults.standard.set(Date().timeIntervalSinceReferenceDate, forKey: lastNewChatKey)
         messages.removeAll()
         currentAssistant = nil
         currentTextSegment = nil

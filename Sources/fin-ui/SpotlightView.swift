@@ -59,6 +59,7 @@ struct SpotlightView: View {
                 vm.loadSession(session)
             }
             picker.onCancel = { self.focusToken += 1 }
+            vm.autoResumeIfNeeded()
         }
         .onExitCommand(perform: handleEscape)
     }
