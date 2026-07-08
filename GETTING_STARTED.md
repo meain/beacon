@@ -1,6 +1,6 @@
 # Getting Started
 
-A quick guide to running fin-ui and driving it from the keyboard.
+A quick guide to running beacon and driving it from the keyboard.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ A quick guide to running fin-ui and driving it from the keyboard.
   ```
 
 - Provider API keys exported in your shell profile (`~/.zshrc` / `~/.zshenv`).
-  fin-ui sources your login-shell environment, so keys set there work even when
+  beacon sources your login-shell environment, so keys set there work even when
   launched as an app.
 
 ## Run it
@@ -25,23 +25,23 @@ make run       # dev build, opens the popup immediately
 Or build and install the app so you can launch it like Spotlight:
 
 ```bash
-make app       # builds fin-ui.app
+make app       # builds beacon.app
 make link      # symlink it into /Applications (tracks your latest build)
 # or: make install  to copy instead of symlink
 ```
 
 ## Bind a global hotkey
 
-fin-ui has no dock icon and closes when it loses focus, so a launch hotkey gives
+beacon has no dock icon and closes when it loses focus, so a launch hotkey gives
 a true Spotlight feel. Point any launcher at the app:
 
-- **Raycast / Alfred**: add a "Launch app" or script action for `fin-ui.app`, assign a hotkey.
-- **macOS Shortcuts**: new shortcut → "Open App" → fin-ui → assign a keyboard shortcut.
-- **skhd**: `cmd - space : open -a fin-ui`
+- **Raycast / Alfred**: add a "Launch app" or script action for `beacon.app`, assign a hotkey.
+- **macOS Shortcuts**: new shortcut → "Open App" → beacon → assign a keyboard shortcut.
+- **skhd**: `cmd - space : open -a beacon`
 
 ## Keyboard shortcuts
 
-fin-ui is fully keyboard driven — no mouse needed for the core flow.
+beacon is fully keyboard driven — no mouse needed for the core flow.
 
 | Key | Action |
 |-----|--------|
@@ -66,7 +66,7 @@ fin-ui is fully keyboard driven — no mouse needed for the core flow.
 
 ## Approvals
 
-fin-ui honours your fin config's approval policy (`settings.approve` plus per-tool
+beacon honours your fin config's approval policy (`settings.approve` plus per-tool
 `approval` in `~/.config/fin/config.toml`). To be asked before tools run, make sure
 `settings.approve` is **not** `"all"` — e.g. remove it so the per-tool settings
 (`confirm` for `write`/`edit`/`shell`) take effect. With `"all"`, everything runs

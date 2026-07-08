@@ -1,5 +1,5 @@
-APP      := fin-ui.app
-BIN      := .build/release/fin-ui
+APP      := beacon.app
+BIN      := .build/release/beacon
 APPS_DIR := /Applications
 
 .PHONY: build run release app install link unlink clean fin help
@@ -17,20 +17,20 @@ run: ## Build and launch the popup (dev)
 release: ## Build an optimized release binary
 	swift build -c release
 
-app: ## Build fin-ui.app bundle
+app: ## Build beacon.app bundle
 	./build-app.sh
 
-install: app ## Copy fin-ui.app into /Applications
+install: app ## Copy beacon.app into /Applications
 	rm -rf "$(APPS_DIR)/$(APP)"
 	cp -r "$(APP)" "$(APPS_DIR)/$(APP)"
 	@echo "Installed $(APPS_DIR)/$(APP)"
 
-link: app ## Symlink fin-ui.app into /Applications (points at this build)
+link: app ## Symlink beacon.app into /Applications (points at this build)
 	rm -rf "$(APPS_DIR)/$(APP)"
 	ln -s "$(CURDIR)/$(APP)" "$(APPS_DIR)/$(APP)"
 	@echo "Linked $(APPS_DIR)/$(APP) -> $(CURDIR)/$(APP)"
 
-unlink: ## Remove fin-ui.app from /Applications
+unlink: ## Remove beacon.app from /Applications
 	rm -rf "$(APPS_DIR)/$(APP)"
 	@echo "Removed $(APPS_DIR)/$(APP)"
 

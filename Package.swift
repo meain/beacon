@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "fin-ui",
+    name: "beacon",
     platforms: [
         .macOS(.v14)
     ],
     targets: [
         .executableTarget(
-            name: "fin-ui",
-            path: "Sources/fin-ui",
+            name: "beacon",
+            path: "Sources/beacon",
             swiftSettings: [
                 .swiftLanguageMode(.v5)
             ]
