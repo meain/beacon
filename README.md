@@ -10,7 +10,7 @@ New here? See [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## How it works
 
-`fin` exposes a machine-readable frontend via `fin -ui json` (added in the fin repo):
+`fin` exposes a machine-readable frontend via `fin -ui json`:
 it emits newline-delimited JSON events on stdout and reads tool-approval decisions from
 stdin. `beacon` spawns that process, decodes the event stream, and renders it.
 
@@ -42,9 +42,9 @@ make run       # dev: build and open the popup
 make app       # release: produces beacon.app
 make install   # copy beacon.app into /Applications
 make link      # symlink beacon.app into /Applications (tracks this build)
-make fin       # install the patched fin CLI from ../fin
+make fin       # install fin CLI from ../fin
 make help      # list all targets
 ```
 
-Requires the patched `fin` on your `PATH` (`go install .` in the fin repo). beacon
+Requires `fin` on your `PATH` (`go install .` in the fin repo, or `make fin`). beacon
 resolves `fin` via a login shell, falling back to `~/.local/share/go/bin/fin` etc.

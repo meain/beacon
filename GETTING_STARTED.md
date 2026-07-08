@@ -5,7 +5,7 @@ A quick guide to running beacon and driving it from the keyboard.
 ## Prerequisites
 
 - macOS 14+ and the Swift toolchain (`swift --version`).
-- The patched `fin` CLI on your `PATH` with the `-ui json` mode. Install it:
+- The `fin` CLI on your `PATH`. Install it:
 
   ```bash
   make fin          # runs `go install .` in ../fin
