@@ -14,7 +14,7 @@ struct SpotlightView: View {
     @FocusState private var pickerFilterFocused: Bool
 
     private var showsTranscript: Bool {
-        !vm.messages.isEmpty || vm.pendingApproval != nil
+        !vm.messages.isEmpty || vm.approval.pending != nil
     }
 
     private var showsFullHeight: Bool {
@@ -123,10 +123,10 @@ struct SpotlightView: View {
                     ForEach(vm.messages) { message in
                         messageView(message).id(message.id)
                     }
-                    if let approval = vm.pendingApproval {
+                    if let approval = vm.approval.pending {
                         ApprovalView(request: approval,
-                                     onApprove: vm.approve,
-                                     onDeny: vm.deny)
+                                     onApprove: vm.approval.approve,
+                                     onDeny: vm.approval.deny)
                             .id("approval")
                     }
                     Color.clear.frame(height: 1).id("bottom")
@@ -137,7 +137,7 @@ struct SpotlightView: View {
             .onAppear { DispatchQueue.main.async { scrollToBottom(proxy) } }
             .onChange(of: vm.streamTick) { scrollToBottom(proxy) }
             .onChange(of: vm.messages.count) { scrollToBottom(proxy) }
-            .onChange(of: vm.pendingApproval?.id) { scrollToBottom(proxy) }
+            .onChange(of: vm.approval.pending?.id) { scrollToBottom(proxy) }
         }
     }
 
@@ -390,8 +390,8 @@ struct SpotlightView: View {
             focusToken += 1
         } else if settingsVisible {
             closeSettings()
-        } else if vm.pendingApproval != nil {
-            vm.deny()
+        } else if vm.approval.pending != nil {
+            vm.approval.deny()
             focusToken += 1
         } else {
             NSApplication.shared.terminate(nil)

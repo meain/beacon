@@ -11,7 +11,7 @@ let package = Package(
             name: "beacon",
             path: "Sources/beacon",
             swiftSettings: [
-                .swiftLanguageMode(.v5)
+                .swiftLanguageMode(.v6)
             ]
         )
     ]

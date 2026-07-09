@@ -2,7 +2,8 @@ import Foundation
 
 /// Spawns the `fin` CLI in JSONL mode and streams decoded events back on the
 /// main queue. Owns the process's stdin so approval decisions can be written.
-final class FinRunner {
+@MainActor
+final class FinRunner: @unchecked Sendable {
     private var process: Process?
     private var stdinHandle: FileHandle?
     private var buffer = Data()
@@ -47,7 +48,7 @@ final class FinRunner {
     /// The user's login-shell environment, captured once. GUI apps launched by
     /// launchd don't inherit the shell profile (and thus miss API keys), so we
     /// source it from an interactive login shell.
-    static let loginEnvironment: [String: String] = {
+    nonisolated static let loginEnvironment: [String: String] = {
         let fallback = ProcessInfo.processInfo.environment
         let shell = Process()
         shell.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -115,7 +116,7 @@ final class FinRunner {
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
-            self?.ingest(data)
+            DispatchQueue.main.async { self?.ingest(data) }
         }
 
         // Surface stderr (retries, fatal errors) as error events.
@@ -172,7 +173,7 @@ final class FinRunner {
     /// first line is the header; each remaining line is one message. Completion
     /// runs on the main queue.
     func loadSession(url: URL,
-                     completion: @escaping (_ id: String?, _ title: String?, _ messages: [LoadedMessage]) -> Void) {
+                     completion: @escaping @Sendable (_ id: String?, _ title: String?, _ messages: [LoadedMessage]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let data = try? Data(contentsOf: url) else {
                 DispatchQueue.main.async { completion(nil, nil, []) }
@@ -225,7 +226,7 @@ final class FinRunner {
     }
 
     /// Decode a tool call's raw JSON argument string into a display map.
-    private static func decodeArgs(_ raw: String) -> [String: JSONValue] {
+    private nonisolated static func decodeArgs(_ raw: String) -> [String: JSONValue] {
         guard let data = raw.data(using: .utf8),
               let obj = try? JSONDecoder().decode([String: JSONValue].self, from: data)
         else { return [:] }
@@ -235,7 +236,7 @@ final class FinRunner {
     /// List the most recent sessions by reading each JSONL file's header line.
     /// Runs off the main thread; completion runs on the main queue.
     func listSessions(limit: Int,
-                      completion: @escaping ([SessionSummary]) -> Void) {
+                      completion: @escaping @Sendable ([SessionSummary]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let home = Self.loginEnvironment["HOME"] ?? NSHomeDirectory()
             let dir = URL(fileURLWithPath: home)

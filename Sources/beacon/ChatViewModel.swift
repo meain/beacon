@@ -1,12 +1,12 @@
 import Foundation
 import SwiftUI
+import Combine
 
 /// Drives the Spotlight window: owns the transcript, the running fin process,
-/// and the pending approval state.
+/// and delegates approval and session tracking to focused sub-objects.
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
-    @Published var pendingApproval: ApprovalRequest?
     @Published var isBusy: Bool = false
     @Published var statusText: String?
     /// True while the startup auto-resume check is in flight; the view stays
@@ -16,52 +16,41 @@ final class ChatViewModel: ObservableObject {
     /// (SpotlightView doesn't otherwise observe nested message updates).
     @Published var streamTick: Int = 0
 
-    private let runner = FinRunner()
+    private let runner: FinRunner
+    private let sessionManager: SessionManager
+    private(set) var approval: ApprovalModel
+
     private var currentAssistant: ChatMessage?
     /// The text block currently being streamed. Reset when a tool starts or the
     /// block ends, so the next text after a tool becomes a fresh ordered segment
     /// rather than being appended to the previous block.
     private var currentTextSegment: TextSegment?
     private var activeTools: [Int: ToolCall] = [:]
-    /// True once this window has completed at least one turn — subsequent turns
-    /// chain onto it so the conversation flows naturally.
-    private var hasHadTurn = false
-    /// The specific fin session loaded from the picker; follow-ups target it
-    /// with `-s <id>` rather than `-c`.
-    private var currentSessionID: String?
 
-    private let lastNewChatKey = "fin.chat.lastExplicitNewChat"
-    private let lastSessionURLKey = "fin.chat.lastSessionURL"
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
-        if let url = Self.cachedResumeURL() {
+        let r = FinRunner()
+        let sm = SessionManager(runner: r)
+        let ap = ApprovalModel(runner: r)
+        runner = r
+        sessionManager = sm
+        approval = ap
+
+        // Forward approval changes so the view refreshes.
+        ap.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        runner.onEvent = { [weak self] event in self?.handle(event) }
+        runner.onExit = { [weak self] in self?.finishTurn() }
+
+        if let url = SessionManager.cachedResumeURL() {
             isResolvingAutoResume = true
             isBusy = true
             statusText = "loading chat…"
-            runner.onEvent = { [weak self] event in self?.handle(event) }
-            runner.onExit = { [weak self] in self?.finishTurn() }
             loadSessionFromURL(url, fallbackID: nil)
-        } else {
-            runner.onEvent = { [weak self] event in self?.handle(event) }
-            runner.onExit = { [weak self] in self?.finishTurn() }
         }
-    }
-
-    /// Synchronous check: returns the URL of the most recent beacon session if
-    /// it was active within the last 5 minutes and the user hasn't started a
-    /// new chat more recently. Reads only UserDefaults + a single file stat.
-    private static func cachedResumeURL() -> URL? {
-        let d = UserDefaults.standard
-        guard let urlStr = d.string(forKey: "fin.chat.lastSessionURL"),
-              let url = URL(string: urlStr) else { return nil }
-        let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            .contentModificationDate) ?? .distantPast
-        guard mtime > Date().addingTimeInterval(-5 * 60) else { return nil }
-        if d.object(forKey: "fin.chat.lastExplicitNewChat") != nil {
-            let newChatTime = Date(timeIntervalSinceReferenceDate: d.double(forKey: "fin.chat.lastExplicitNewChat"))
-            if newChatTime > mtime { return nil }
-        }
-        return url
     }
 
     /// Called on launch. Loads the most recent session automatically if it had
@@ -69,15 +58,17 @@ final class ChatViewModel: ObservableObject {
     /// a new chat more recently than that session's last message.
     func autoResumeIfNeeded() {
         listSessions { [weak self] sessions in
-            guard let self else { return }
-            guard let recent = sessions.first else { return }
-            guard recent.date > Date().addingTimeInterval(-5 * 60) else { return }
-            let d = UserDefaults.standard
-            if d.object(forKey: self.lastNewChatKey) != nil {
-                let newChatTime = Date(timeIntervalSinceReferenceDate: d.double(forKey: self.lastNewChatKey))
-                if newChatTime > recent.date { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let recent = sessions.first else { return }
+                guard recent.date > Date().addingTimeInterval(-5 * 60) else { return }
+                let d = UserDefaults.standard
+                if d.object(forKey: "fin.chat.lastExplicitNewChat") != nil {
+                    let newChatTime = Date(timeIntervalSinceReferenceDate: d.double(forKey: "fin.chat.lastExplicitNewChat"))
+                    if newChatTime > recent.date { return }
+                }
+                self.loadSession(recent)
             }
-            self.loadSession(recent)
         }
     }
 
@@ -96,20 +87,13 @@ final class ChatViewModel: ObservableObject {
         isBusy = true
         statusText = nil
 
-        let continuation: FinRunner.Continuation
-        if let sid = currentSessionID {
-            continuation = .session(sid)
-        } else if hasHadTurn {
-            continuation = .last
-        } else {
-            continuation = .fresh
-        }
-        runner.start(prompt: trimmed, continuation: continuation, model: nil)
+        let continuation = sessionManager.continuation
+        runner.start(prompt: trimmed, continuation: continuation, model: AppSettings.shared.selectedModel.isEmpty ? nil : AppSettings.shared.selectedModel)
     }
 
     /// Fetch the recent session list for the picker.
-    func listSessions(_ completion: @escaping ([SessionSummary]) -> Void) {
-        runner.listSessions(limit: 50, completion: completion)
+    func listSessions(_ completion: @escaping @Sendable ([SessionSummary]) -> Void) {
+        sessionManager.listSessions(limit: 50, completion: completion)
     }
 
     /// Load a session (from the picker) into the transcript by reading its file
@@ -118,67 +102,56 @@ final class ChatViewModel: ObservableObject {
         guard !isBusy else { return }
         isBusy = true
         statusText = "loading chat…"
-        UserDefaults.standard.set(summary.url.absoluteString, forKey: lastSessionURLKey)
+        sessionManager.recordSessionURL(summary.url)
         loadSessionFromURL(summary.url, fallbackID: summary.id)
     }
 
     private func loadSessionFromURL(_ url: URL, fallbackID: String?) {
-        runner.loadSession(url: url) { [weak self] sid, title, loaded in
-            guard let self else { return }
-            self.isBusy = false
-            self.isResolvingAutoResume = false
-            guard !loaded.isEmpty else {
-                self.statusText = "could not load chat"
-                return
-            }
-            self.messages = loaded.map { lm in
-                // User turns keep plain text; assistant turns are rebuilt as
-                // ordered segments (text block, if any, then its tool calls —
-                // the order fin persists them in an assistant message).
-                let msg = ChatMessage(role: lm.role,
-                                      text: lm.role == .user ? lm.text : "")
-                if lm.role == .assistant {
-                    if !lm.text.isEmpty {
-                        msg.segments.append(.text(TextSegment(lm.text)))
-                    }
-                    for (i, lt) in lm.tools.enumerated() {
-                        let tool = ToolCall(index: i, name: lt.name, args: lt.args)
-                        tool.running = false
-                        tool.result = lt.result
-                        msg.segments.append(.tool(tool))
-                    }
+        sessionManager.loadSession(url: url) { [weak self] sid, title, loaded in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.isBusy = false
+                self.isResolvingAutoResume = false
+                guard !loaded.isEmpty else {
+                    self.statusText = "could not load chat"
+                    return
                 }
-                return msg
+                self.messages = loaded.map { lm in
+                    // User turns keep plain text; assistant turns are rebuilt as
+                    // ordered segments (text block, if any, then its tool calls —
+                    // the order fin persists them in an assistant message).
+                    let msg = ChatMessage(role: lm.role,
+                                          text: lm.role == .user ? lm.text : "")
+                    if lm.role == .assistant {
+                        if !lm.text.isEmpty {
+                            msg.segments.append(.text(TextSegment(lm.text)))
+                        }
+                        for (i, lt) in lm.tools.enumerated() {
+                            let tool = ToolCall(index: i, name: lt.name, args: lt.args)
+                            tool.running = false
+                            tool.result = lt.result
+                            msg.segments.append(.tool(tool))
+                        }
+                    }
+                    return msg
+                }
+                self.sessionManager.applyLoadedSession(id: sid ?? fallbackID)
+                self.statusText = title
+                self.streamTick &+= 1
             }
-            self.currentSessionID = sid ?? fallbackID
-            self.hasHadTurn = true
-            self.statusText = title
-            self.streamTick &+= 1
         }
     }
 
     /// Reset the window for a brand-new conversation.
     func newChat() {
         guard !isBusy else { return }
-        UserDefaults.standard.set(Date().timeIntervalSinceReferenceDate, forKey: lastNewChatKey)
+        sessionManager.clearForNewChat()
         messages.removeAll()
         currentAssistant = nil
         currentTextSegment = nil
         activeTools = [:]
-        hasHadTurn = false
-        currentSessionID = nil
-        pendingApproval = nil
+        approval.clear()
         statusText = nil
-    }
-
-    func approve() {
-        pendingApproval = nil
-        runner.respondToApproval(approve: true)
-    }
-
-    func deny() {
-        pendingApproval = nil
-        runner.respondToApproval(approve: false)
     }
 
     func cancel() {
@@ -219,7 +192,7 @@ final class ChatViewModel: ObservableObject {
 
         case "approval":
             if let name = event.name {
-                pendingApproval = ApprovalRequest(name: name, args: event.args ?? [:])
+                approval.set(ApprovalRequest(name: name, args: event.args ?? [:]))
             }
 
         case "session":
@@ -274,7 +247,7 @@ final class ChatViewModel: ObservableObject {
         currentAssistant = nil
         currentTextSegment = nil
         isBusy = false
-        hasHadTurn = true
-        pendingApproval = nil
+        sessionManager.markTurnDone()
+        approval.clear()
     }
 }

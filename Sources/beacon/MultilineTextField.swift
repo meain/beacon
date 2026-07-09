@@ -81,11 +81,12 @@ struct MultilineTextField: NSViewRepresentable {
             recalculateHeight(tv)
         }
 
+        @MainActor
         func recalculateHeight(_ tv: NSTextView) {
             guard let lm = tv.layoutManager, let tc = tv.textContainer else { return }
             lm.ensureLayout(for: tc)
             let h = max(lm.usedRect(for: tc).height, 24)
-            DispatchQueue.main.async { self.onHeightChange?(h) }
+            onHeightChange?(h)
         }
     }
 }

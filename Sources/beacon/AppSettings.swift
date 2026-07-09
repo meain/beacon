@@ -5,6 +5,7 @@ import SwiftUI
 /// a singleton so every view can observe the same instance without plumbing.
 /// Views read fonts through `font(_:)` / `mono(_:)` so a size or family change
 /// re-flows the whole transcript uniformly.
+@MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
@@ -24,6 +25,10 @@ final class AppSettings: ObservableObject {
     @Published var accentColorHex: String {
         didSet { defaults.set(accentColorHex, forKey: Keys.accentColorHex) }
     }
+    /// Model string passed to fin via `-m`. Empty = fin's configured default.
+    @Published var selectedModel: String {
+        didSet { defaults.set(selectedModel, forKey: Keys.selectedModel) }
+    }
 
     private let defaults = UserDefaults.standard
     private enum Keys {
@@ -31,6 +36,7 @@ final class AppSettings: ObservableObject {
         static let monoFontFamily = "fin.font.mono"
         static let baseFontSize = "fin.font.size"
         static let accentColorHex = "fin.color.accent"
+        static let selectedModel = "fin.model"
     }
 
     static let defaultSize: Double = 14
@@ -41,6 +47,7 @@ final class AppSettings: ObservableObject {
         let saved = defaults.double(forKey: Keys.baseFontSize)
         baseFontSize = saved == 0 ? Self.defaultSize : saved
         accentColorHex = defaults.string(forKey: Keys.accentColorHex) ?? ""
+        selectedModel = defaults.string(forKey: Keys.selectedModel) ?? ""
     }
 
     /// Scale applied to every nominal font size (the design was authored at 14pt).
@@ -100,6 +107,7 @@ final class AppSettings: ObservableObject {
         monoFontFamily = ""
         baseFontSize = Self.defaultSize
         accentColorHex = ""
+        selectedModel = ""
     }
 
     // MARK: - Available fonts

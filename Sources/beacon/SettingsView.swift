@@ -118,6 +118,12 @@ struct SettingsView: View {
                 }
             }
 
+            settingRow("Model") {
+                TextField("Default (from fin config)", text: $settings.selectedModel)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+            }
+
             // Live preview so choices are visible without leaving settings.
             // Pass nominal design sizes (font(_:) scales them by baseFontSize/14).
             VStack(alignment: .leading, spacing: 6) {

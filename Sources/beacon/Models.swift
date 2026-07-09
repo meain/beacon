@@ -4,7 +4,7 @@ import Foundation
 
 /// A minimal JSON value used to decode arbitrary tool argument objects
 /// coming from fin's JSONL stream.
-enum JSONValue: Decodable {
+enum JSONValue: Decodable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -88,14 +88,14 @@ struct ExportedToolCall: Decodable {
 }
 
 /// A tool call reconstructed from a loaded session.
-struct LoadedTool {
+struct LoadedTool: Sendable {
     let name: String
     let args: [String: JSONValue]
     let result: String?
 }
 
 /// A message loaded from a previous session, ready to seed the transcript.
-struct LoadedMessage {
+struct LoadedMessage: Sendable {
     let role: ChatMessage.Role
     let text: String
     let tools: [LoadedTool]
@@ -109,7 +109,7 @@ struct SessionHeader: Decodable {
 }
 
 /// A previous session shown in the picker.
-struct SessionSummary: Identifiable {
+struct SessionSummary: Identifiable, Sendable {
     let id: String
     let title: String
     let date: Date

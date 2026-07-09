@@ -22,7 +22,7 @@ final class PickerModel: ObservableObject {
     var onSelect: ((SessionSummary) -> Void)?
     var onCancel: (() -> Void)?
 
-    private var monitor: Any?
+    nonisolated(unsafe) private var monitor: Any?
 
     func show(_ list: [SessionSummary]) {
         sessions = list
