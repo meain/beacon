@@ -9,6 +9,14 @@ final class PickerModel: ObservableObject {
     @Published var visible = false
     @Published var sessions: [SessionSummary] = []
     @Published var selection = 0
+    @Published var filterText: String = "" {
+        didSet { filterChanged() }
+    }
+
+    var filteredSessions: [SessionSummary] {
+        guard !filterText.isEmpty else { return sessions }
+        return sessions.filter { $0.title.localizedCaseInsensitiveContains(filterText) }
+    }
 
     /// Invoked when the user picks a session or cancels.
     var onSelect: ((SessionSummary) -> Void)?
@@ -19,18 +27,21 @@ final class PickerModel: ObservableObject {
     func show(_ list: [SessionSummary]) {
         sessions = list
         selection = 0
+        filterText = ""
         visible = true
         installMonitor()
     }
 
     func hide() {
         visible = false
+        filterText = ""
         removeMonitor()
     }
 
     func move(_ delta: Int) {
-        guard !sessions.isEmpty else { return }
-        selection = min(max(0, selection + delta), sessions.count - 1)
+        let list = filteredSessions
+        guard !list.isEmpty else { return }
+        selection = min(max(0, selection + delta), list.count - 1)
     }
 
     func choose(_ index: Int) {
@@ -38,9 +49,16 @@ final class PickerModel: ObservableObject {
         commit()
     }
 
+    private func filterChanged() {
+        let count = filteredSessions.count
+        guard count > 0 else { selection = 0; return }
+        selection = min(selection, count - 1)
+    }
+
     private func commit() {
-        guard sessions.indices.contains(selection) else { return }
-        let session = sessions[selection]
+        let list = filteredSessions
+        guard list.indices.contains(selection) else { return }
+        let session = list[selection]
         hide()
         onSelect?(session)
     }

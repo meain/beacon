@@ -10,13 +10,15 @@ struct SpotlightView: View {
     @State private var focusToken = 0
     @State private var inputHeight: CGFloat = 24
     @State private var settingsVisible = false
+    @State private var helpVisible = false
+    @FocusState private var pickerFilterFocused: Bool
 
     private var showsTranscript: Bool {
         !vm.messages.isEmpty || vm.pendingApproval != nil
     }
 
     private var showsFullHeight: Bool {
-        showsTranscript || picker.visible || settingsVisible || vm.isResolvingAutoResume
+        showsTranscript || picker.visible || settingsVisible || helpVisible || vm.isResolvingAutoResume
     }
 
     var body: some View {
@@ -25,6 +27,8 @@ struct SpotlightView: View {
                 pickerOverlay
             } else if settingsVisible {
                 SettingsView(onClose: closeSettings)
+            } else if helpVisible {
+                helpOverlay
             } else {
                 mainContent
             }
@@ -160,6 +164,15 @@ struct SpotlightView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
+            Button(action: { helpVisible.toggle() }) {
+                Text("?")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, height: 16)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            .buttonStyle(.plain)
             if let status = vm.statusText {
                 Text(status)
                     .font(.system(size: 11))
@@ -228,17 +241,25 @@ struct SpotlightView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
+
+            TextField("Filter…", text: $picker.filterText)
+                .font(.system(size: 13))
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 10)
+                .focused($pickerFilterFocused)
+
             Divider()
 
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(Array(picker.sessions.enumerated()), id: \.element.id) { i, session in
+                        ForEach(Array(picker.filteredSessions.enumerated()), id: \.element.id) { i, session in
                             pickerRow(index: i, session: session)
                                 .id(i)
                         }
-                        if picker.sessions.isEmpty {
-                            Text("No previous chats")
+                        if picker.filteredSessions.isEmpty {
+                            Text(picker.filterText.isEmpty ? "No previous chats" : "No matching chats")
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity)
@@ -253,6 +274,66 @@ struct SpotlightView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: picker.visible) {
+            if picker.visible {
+                DispatchQueue.main.async { pickerFilterFocused = true }
+            }
+        }
+    }
+
+    // MARK: - Help overlay
+
+    private var helpOverlay: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Keyboard shortcuts")
+                    .font(.system(size: 16, weight: .medium))
+                Spacer()
+                Button(action: { helpVisible = false; focusToken += 1 }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            let shortcuts: [(String, String)] = [
+                ("⏎", "Send message"),
+                ("⇧⏎", "Insert newline"),
+                ("Esc", "Close window / cancel"),
+                ("⌘P", "Open previous chat"),
+                ("⌘N", "New chat"),
+                ("⌘,", "Settings"),
+                ("↑ / ↓", "Navigate picker"),
+                ("⌘⏎", "Approve tool call"),
+            ]
+
+            VStack(spacing: 0) {
+                ForEach(Array(shortcuts.enumerated()), id: \.offset) { _, pair in
+                    HStack(spacing: 0) {
+                        Text(pair.0)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .frame(width: 90, alignment: .leading)
+                        Text(pair.1)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 7)
+                }
+            }
+            .padding(.vertical, 6)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onExitCommand { helpVisible = false; focusToken += 1 }
     }
 
     private func pickerRow(index: Int, session: SessionSummary) -> some View {
@@ -283,6 +364,7 @@ struct SpotlightView: View {
 
     private func openPicker() {
         guard !vm.isBusy, !picker.visible else { return }
+        if helpVisible { helpVisible = false }
         if vm.messages.isEmpty {
             // No active chat: jump directly to the most recent session.
             vm.listSessions { list in
@@ -303,6 +385,9 @@ struct SpotlightView: View {
         if picker.visible {
             picker.hide()
             focusToken += 1
+        } else if helpVisible {
+            helpVisible = false
+            focusToken += 1
         } else if settingsVisible {
             closeSettings()
         } else if vm.pendingApproval != nil {
@@ -315,6 +400,7 @@ struct SpotlightView: View {
 
     private func toggleSettings() {
         guard !picker.visible else { return }
+        if helpVisible { helpVisible = false }
         if settingsVisible { closeSettings() } else { settingsVisible = true }
     }
 
